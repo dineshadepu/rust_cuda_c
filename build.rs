@@ -9,4 +9,17 @@ fn main() {
         .file("src/axpb.cpp")
         .cpp(true)
         .compile("libaxpbcpp.a");
+
+    cc::Build::new()
+        .cpp(true)
+        .cuda(true)
+        .flag("-cudart=shared")
+        .flag("-gencode")
+        .flag("arch=compute_61,code=sm_61")
+        .file("src/axpb.cu")
+        .compile("libaxpbcu.a");
+
+    println!("cargo:rustc-link-search=native=/usr/local/cuda/lib64");
+    println!("cargo:rustc-link-lib=cudart");
+
 }

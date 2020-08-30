@@ -10,11 +10,25 @@ use structopt::StructOpt;
 // from axpb.c file
 extern "C" {
     fn double_input(input: libc::c_int) -> libc::c_int;
-    fn axpb_c(a: *const libc::c_double, b: *const libc::c_double, c: *mut libc::c_double,
-	      n: libc::c_int);
+    fn axpb_c(
+        a: *const libc::c_double,
+        b: *const libc::c_double,
+        c: *mut libc::c_double,
+        n: libc::c_int,
+    );
 
-    fn axpb_cpp(a: *const libc::c_double, b: *const libc::c_double, c: *mut libc::c_double,
-		n: libc::c_int);
+    fn axpb_cpp(
+        a: *const libc::c_double,
+        b: *const libc::c_double,
+        c: *mut libc::c_double,
+        n: libc::c_int,
+    );
+    fn axpb_cpp_cuda(
+        a: *const libc::c_double,
+        b: *const libc::c_double,
+        c: *mut libc::c_double,
+        n: libc::c_int,
+    );
 }
 
 fn true_or_false(s: &str) -> Result<bool, &'static str> {
@@ -44,8 +58,8 @@ pub fn main(args: &[String]) {
     serial_c_axpb();
     serial_cpp_axpb();
     // serial_cpp_cuda_axpb();
-    rayon_parallel_axpb();
-    // gpu_parallel_axpb().unwrap();
+    parallel_rayon_axpb();
+    parallel_cpp_ffi_cuda_axpb();
 }
 
 pub fn serial_axpb() {
@@ -59,7 +73,7 @@ pub fn serial_axpb() {
     println!("c in serial is {:?}", c)
 }
 
-pub fn rayon_parallel_axpb() {
+pub fn parallel_rayon_axpb() {
     let a = vec![1., 2., 3., 4.];
     let b = vec![1., 2., 3., 4.];
     let mut c = vec![0., 0., 0., 0.];
@@ -128,7 +142,6 @@ pub fn serial_c_axpb() {
     println!("c in serial c code ffi is {:?}", c);
 }
 
-
 pub fn serial_cpp_axpb() {
     let a = vec![1., 2., 3., 4.];
     let b = vec![1., 2., 3., 4.];
@@ -137,4 +150,15 @@ pub fn serial_cpp_axpb() {
     unsafe { axpb_cpp(a.as_ptr(), b.as_ptr(), c.as_mut_ptr(), c.len() as i32) };
 
     println!("c in serial cpp code ffi is {:?}", c);
+}
+
+
+pub fn parallel_cpp_ffi_cuda_axpb() {
+    let a = vec![1., 2., 3., 4.];
+    let b = vec![1., 2., 3., 4.];
+    let mut c = vec![0., 0., 0., 0.];
+
+    unsafe { axpb_cpp_cuda(a.as_ptr(), b.as_ptr(), c.as_mut_ptr(), c.len() as i32) };
+
+    println!("c in cpp code ffi cuda is {:?}", c);
 }
