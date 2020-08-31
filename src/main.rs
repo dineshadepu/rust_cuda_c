@@ -3,13 +3,17 @@ use std::io;
 use std::io::prelude::*;
 use std::process::exit;
 
-// // for cuda
-// #[macro_use]
-// extern crate rustacuda;
+// for cuda
+#[cfg(feature="gpu")]
+#[macro_use]
+extern crate rustacuda;
 
-// #[macro_use]
-// extern crate rustacuda_derive;
-// extern crate rustacuda_core;
+#[cfg(feature="gpu")]
+#[macro_use]
+extern crate rustacuda_derive;
+
+#[cfg(feature="gpu")]
+extern crate rustacuda_core;
 
 // pub mod mesh;
 pub mod axpb;

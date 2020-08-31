@@ -1,11 +1,13 @@
 use rayon::prelude::*;
 use structopt::StructOpt;
 
-// // for cuda
-// use rustacuda::prelude::*;
-// use rustacuda::memory::DeviceBox;
-// use std::error::Error;
-// use std::ffi::CString;
+
+#[cfg(feature="gpu")]
+use rustacuda::prelude::*;
+#[cfg(feature="gpu")]
+use rustacuda::memory::DeviceBox;
+use std::error::Error;
+use std::ffi::CString;
 
 // from axpb.c file
 extern "C" {
@@ -23,6 +25,12 @@ extern "C" {
         c: *mut libc::c_double,
         n: libc::c_int,
     );
+
+}
+
+#[cfg(feature="gpu")]
+extern "C" {
+
     fn axpb_cpp_cuda(
         a: *const libc::c_double,
         b: *const libc::c_double,
@@ -30,6 +38,7 @@ extern "C" {
         n: libc::c_int,
     );
 }
+
 
 fn true_or_false(s: &str) -> Result<bool, &'static str> {
     match s {
@@ -39,98 +48,104 @@ fn true_or_false(s: &str) -> Result<bool, &'static str> {
     }
 }
 
-/// Search for a pattern in a file and display the lines that contain it.
-#[derive(StructOpt)]
-struct Cli {
-    /// To run code in parallel on CPU with `rayon`
-    #[structopt(long, parse(try_from_str))]
-    rayon: bool,
+    /// Search for a pattern in a file and display the lines that contain it.
+    #[derive(StructOpt)]
+    struct Cli {
+	/// To run code in parallel on CPU with `rayon`
+	#[structopt(long, parse(try_from_str))]
+	rayon: bool,
 
-    /// To run code in parallel on GPU with `rayon`
-    #[structopt(long, parse(try_from_str))]
-    cuda: bool,
-}
-
-pub fn main(args: &[String]) {
-    // if args
-    // let args = Cli::from_args();
-    serial_axpb();
-    serial_c_axpb();
-    serial_cpp_axpb();
-    // serial_cpp_cuda_axpb();
-    parallel_rayon_axpb();
-    parallel_cpp_ffi_cuda_axpb();
-}
-
-pub fn serial_axpb() {
-    let a = vec![1., 2., 3., 4.];
-    let b = vec![1., 2., 3., 4.];
-    let mut c = vec![0., 0., 0., 0.];
-
-    for i in 0..a.len() {
-        c[i] += a[i] + b[i];
+	/// To run code in parallel on GPU with `rayon`
+	#[structopt(long, parse(try_from_str))]
+	cuda: bool,
     }
-    println!("c in serial is {:?}", c)
+
+    pub fn main(args: &[String]) {
+	// if args
+	// let args = Cli::from_args();
+	serial_axpb();
+	serial_c_axpb();
+	serial_cpp_axpb();
+	// serial_cpp_cuda_axpb();
+	parallel_rayon_axpb();
+
+	#[cfg(feature="gpu")]{
+	    parallel_cpp_ffi_cuda_axpb();
+	}
+    }
+
+    pub fn serial_axpb() {
+	let a = vec![1., 2., 3., 4.];
+	let b = vec![1., 2., 3., 4.];
+	let mut c = vec![0., 0., 0., 0.];
+
+	for i in 0..a.len() {
+            c[i] += a[i] + b[i];
+	}
+	println!("c in serial is {:?}", c)
+    }
+
+    pub fn parallel_rayon_axpb() {
+	let a = vec![1., 2., 3., 4.];
+	let b = vec![1., 2., 3., 4.];
+	let mut c = vec![0., 0., 0., 0.];
+
+	c.par_iter_mut().enumerate().for_each(|(i, c_i)| {
+            *c_i = a[i] + b[i];
+	});
+
+	println!("c in parallel rayon is {:?}", c)
+    }
+
+
+
+    #[cfg(feature="gpu")]
+    fn gpu_parallel_axpb() -> Result<(), Box<dyn Error>> {
+	// Initialize the CUDA API
+	rustacuda::init(CudaFlags::empty())?;
+
+	// Get the first device
+	let device = Device::get_device(0)?;
+
+	// Create a context associated to this device
+	// let context = Context::create_and_push(
+	//     ContextFlags::MAP_HOST | ContextFlags::SCHED_AUTO, device)?;
+
+	// Load the module containing the function we want to call
+	let module_data = CString::new(include_str!("../resources/add.ptx"))?;
+	let module = Module::load_from_string(&module_data)?;
+
+	// Create a stream to submit work to
+	let stream = Stream::new(StreamFlags::NON_BLOCKING, None)?;
+
+	// Allocate space on the device and copy numbers to it.
+	let mut x = DeviceBox::new(&10.0f32)?;
+	let mut y = DeviceBox::new(&20.0f32)?;
+	let mut result = DeviceBox::new(&0.0f32)?;
+
+	// Launching kernels is unsafe since Rust can't enforce safety - think of kernel launches
+	// as a foreign-function call. In this case, it is - this kernel is written in CUDA C.
+	unsafe {
+            // Launch the `sum` function with one block containing one thread on the given stream.
+            launch!(module.sum<<<1, 1, 0, stream>>>(
+		x.as_device_ptr(),
+		y.as_device_ptr(),
+		result.as_device_ptr(),
+		1 // Length
+            ))?;
+	}
+
+	// The kernel launch is asynchronous, so we wait for the kernel to finish executing
+	stream.synchronize()?;
+
+	// Copy the result back to the host
+	let mut result_host = 0.0f32;
+	result.copy_to(&mut result_host)?;
+
+	println!("Sum is {}", result_host);
+
+	Ok(())
 }
-
-pub fn parallel_rayon_axpb() {
-    let a = vec![1., 2., 3., 4.];
-    let b = vec![1., 2., 3., 4.];
-    let mut c = vec![0., 0., 0., 0.];
-
-    c.par_iter_mut().enumerate().for_each(|(i, c_i)| {
-        *c_i = a[i] + b[i];
-    });
-
-    println!("c in parallel rayon is {:?}", c)
-}
-
-// fn gpu_parallel_axpb() -> Result<(), Box<dyn Error>> {
-//     // Initialize the CUDA API
-//     rustacuda::init(CudaFlags::empty())?;
-
-//     // Get the first device
-//     let device = Device::get_device(0)?;
-
-//     // Create a context associated to this device
-//     // let context = Context::create_and_push(
-//     //     ContextFlags::MAP_HOST | ContextFlags::SCHED_AUTO, device)?;
-
-//     // Load the module containing the function we want to call
-//     let module_data = CString::new(include_str!("../resources/add.ptx"))?;
-//     let module = Module::load_from_string(&module_data)?;
-
-//     // Create a stream to submit work to
-//     let stream = Stream::new(StreamFlags::NON_BLOCKING, None)?;
-
-//     // Allocate space on the device and copy numbers to it.
-//     let mut x = DeviceBox::new(&10.0f32)?;
-//     let mut y = DeviceBox::new(&20.0f32)?;
-//     let mut result = DeviceBox::new(&0.0f32)?;
-
-//     // Launching kernels is unsafe since Rust can't enforce safety - think of kernel launches
-//     // as a foreign-function call. In this case, it is - this kernel is written in CUDA C.
-//     unsafe {
-//         // Launch the `sum` function with one block containing one thread on the given stream.
-//         launch!(module.sum<<<1, 1, 0, stream>>>(
-//             x.as_device_ptr(),
-//             y.as_device_ptr(),
-//             result.as_device_ptr(),
-//             1 // Length
-//         ))?;
-//     }
-
-//     // The kernel launch is asynchronous, so we wait for the kernel to finish executing
-//     stream.synchronize()?;
-
-//     // Copy the result back to the host
-//     let mut result_host = 0.0f32;
-//     result.copy_to(&mut result_host)?;
-
-//     println!("Sum is {}", result_host);
-
-//     Ok(())
-// }
 
 pub fn serial_c_axpb() {
     let a = vec![1., 2., 3., 4.];
@@ -153,6 +168,7 @@ pub fn serial_cpp_axpb() {
 }
 
 
+#[cfg(feature="gpu")]
 pub fn parallel_cpp_ffi_cuda_axpb() {
     let a = vec![1., 2., 3., 4.];
     let b = vec![1., 2., 3., 4.];

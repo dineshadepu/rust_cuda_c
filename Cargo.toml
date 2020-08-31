@@ -9,13 +9,24 @@ edition = "2018"
 [dependencies]
 rayon = "1.4"
 structopt = "0.3.13"
+libc = "0.2"
 
 # cuda
-# rustacuda = "0.1"
-# rustacuda_core = "0.1"
-# rustacuda_derive = "0.1"
+[dependencies.rustacuda]
+version = "0.1"
+optional = true
 
-libc = "0.2"
+[dependencies.rustacuda_core]
+version = "0.1"
+optional = true
+
+[dependencies.rustacuda_derive]
+version = "0.1"
+optional = true
+
 
 [build-dependencies]
 cc = "1.0"
+
+[features]
+gpu = ["rustacuda", "rustacuda_core", "rustacuda_derive"]

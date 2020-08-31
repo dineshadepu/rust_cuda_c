@@ -25,19 +25,6 @@ extern "C" void axpb_cpp_cuda(double h_x[], double h_y[], double h_z[], int n) {
   /* Define vector length */
   size = n*sizeof(double);
 
-  // Print original vectors.
-  printf("h_x = ");
-  for (int i = 0; i < n; i++){
-    printf("%f ", h_x[i]);
-  }
-  printf("\n\n");
-  printf("h_y = ");
-  for (int i = 0; i < n; i++){
-    printf("%.1f ", h_y[i]);
-  }
-  printf("\n\n");
-
-
   /* Allocate vectors in device memory */
   cudaMalloc(&d_x, size);
   cudaMalloc(&d_y, size);
@@ -52,22 +39,10 @@ extern "C" void axpb_cpp_cuda(double h_x[], double h_y[], double h_z[], int n) {
 
   cudaThreadSynchronize();
   cudaMemcpy(h_z, d_z, size, cudaMemcpyDeviceToHost);
-  printf("The sum is: \n");
-  for (int i = 0; i < n; i++){
-    printf("%.1f ", h_z[i]);
-  }
-  printf("\n");
-
 
   /* Free device memory */
   cudaFree(d_x);
   cudaFree(d_y);
   cudaFree(d_z);
-
-  /* Free host memory */
-  /* free(h_x); */
-  /* free(h_y); */
-  /* free(h_z); */
-
 
 }  /* main */
